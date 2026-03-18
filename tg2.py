@@ -131,8 +131,8 @@ async def cmd_start(message: types.Message, state: FSMContext):
     ])
 
     await message.answer(
-        "Добро пожаловать в официальный Telegram-бот <b>журнала «Облик. Esthetic Guide»</b>. "
-        "С нашим ботом вы сможете проверить и актуализировать знания по анатомии лица. "
+        "Добро пожаловать в официальный Telegram-бот <b>журнала «Облик. Esthetic Guide»</b>.\n"
+        "С нашим ботом вы сможете проверить и актуализировать знания по анатомии лица.\n"
         "<blockquote>"
         "Отвечая на вопросы, выбирайте тот ответ, который считаете <b>правильным</b>. "
         "Всего в тесте 10 вопросов. После их прохождения бот посчитает количество верных ответов. "
@@ -153,6 +153,26 @@ async def accept_callback(callback: types.CallbackQuery, state: FSMContext):
     # Список для удаления персональных сообщений в будущем
     await state.update_data(personal_msgs=[msg1.message_id, msg2.message_id])
     await state.set_state(TestState.email)
+    await callback.answer()
+
+@dp.callback_query(F.data == "decline")
+async def decline_callback(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    
+    try:
+        # Удаляем главное сообщение с кнопками
+        await callback.message.delete()
+    except:
+        pass
+    
+    # Отправляем прощание и удаляем через 2 сек
+    msg = await callback.message.answer("Спасибо, что зашли! До свидания! 👋")
+    await asyncio.sleep(2)
+    try:
+        await msg.delete()
+    except:
+        pass
+    
     await callback.answer()
 
 @dp.message(TestState.email)
