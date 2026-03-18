@@ -11,18 +11,25 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram import Bot, Dispatcher, types
+from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
 
 # ================== НАСТРОЙКИ ==================
-# ВОЗВРАЩЕНО: Сессия с таймаутом
+
 session = AiohttpSession(timeout=60)
 API_TOKEN = os.getenv("BOT_TOKEN")
 
-logging.basicConfig(level=logging.INFO)
-bot = Bot(token=API_TOKEN, session=session)
+bot = Bot(
+    token=API_TOKEN,
+    session=session,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+)
 dp = Dispatcher()
 
 # ================== СОСТОЯНИЯ ==================
 class TestState(StatesGroup):
+    waiting_start = State()
     email = State()
     name = State()
     city = State()
@@ -30,18 +37,38 @@ class TestState(StatesGroup):
     question = State()
     results = State()
 
-# ================== ВСЕ 10 ВОПРОСОВ ==================
+# ================== ВОПРОСЫ (ВСЕ 10 ШТУК) ==================
 questions = [
-    {"q": "Какую структуру можно повредить в межфасциальном пространстве височной области?", "options": ["Сторожевая вена", "Поверхностная височная артерия", "Ушно-височный нерв", "Щелочная мышца"], "answer": "Сторожевая вена"},
-    {"q": "Какую структуру можно повредить в межфасциальном пространстве височной области?", "options": ["Поверхностная височная артерия", "Сторожевая вена", "Ушно-височный нерв", "Лобная кость"], "answer": "Сторожевая вена"},
-    {"q": "Какую структуру можно повредить в межфасциальном пространстве височной области?", "options": ["Ушно-височный нерв", "Поверхностная височная артерия", "Сторожевая вена", "Верхнечелюстная кость"], "answer": "Сторожевая вена"},
-    {"q": "Какую структуру можно повредить в межфасциальном пространстве височной области?", "options": ["Сторожевая вена", "Ушно-височный нерв", "Поверхностная височная артерия", "Затылочная мышца"], "answer": "Сторожевая вена"},
-    {"q": "Какую структуру можно повредить в межфасциальном пространстве височной области?", "options": ["Поверхностная височная артерия", "Сторожевая вена", "Ушно-височный нерв", "Глазничная артерия"], "answer": "Сторожевая вена"},
-    {"q": "Какую структуру можно повредить в межфасциальном пространстве височной области?", "options": ["Сторожевая вена", "Ушно-височный нерв", "Поверхностная височная артерия", "Нижнечелюстная мышца"], "answer": "Сторожевая вена"},
-    {"q": "Какую структуру можно повредить в межфасциальном пространстве височной области?", "options": ["Ушно-височный нерв", "Сторожевая вена", "Поверхностная височная артерия", "Сосцевидная кость"], "answer": "Сторожевая вена"},
-    {"q": "Какую структуру можно повредить в межфасциальном пространстве височной области?", "options": ["Сторожевая вена", "Поверхностная височная артерия", "Ушно-височный нерв", "Круговая мышца рта"], "answer": "Сторожевая вена"},
-    {"q": "Какую структуру можно повредить в межфасциальном пространстве височной области?", "options": ["Поверхностная височная артерия", "Ушно-височный нерв", "Сторожевая вена", "Подклювочная мышца"], "answer": "Сторожевая вена"},
-    {"q": "Какую структуру можно повредить в межфасциальном пространстве височной области?", "options": ["Сторожевая вена", "Ушно-височный нерв", "Поверхностная височная артерия", "Верхнегубная мышца"], "answer": "Сторожевая вена"}
+    {"q": "Какую структуру можно повредить в межфасциальном пространстве височной области?",
+    "options": ["Сторожевая вена", "Поверхностная височная артерия", "Ушно-височный нерв"],
+    "answer": "Сторожевая вена"},
+    {"q": "Под какой мышцей располагается пространство Ристоу?",
+    "options": ["Мышца, поднимающая верхнюю губу и крыло носа", "Мышца, поднимающая верхнюю губу", "Мышца, поднимающая угол рта"],
+    "answer": "Мышца, поднимающая верхнюю губу и крыло носа"},
+    {"q": "Какое осложнение возможно при травме подбородочного нерва?",
+    "options": ["Потеря чувствительности нижней трети лица", "Атония мимической мускулатуры нижней трети лица", "Паралич подбородочной мышцы"],
+    "answer": "Потеря чувствительности нижней трети лица"},
+    {"q": "Какая мышца выполняет одновременно леваторную и депрессорную функции?",
+    "options": ["Круговая мышца глаза", "Надчерепная мышца", "Подбородочная мышца"],
+    "answer": "Круговая мышца глаза"},
+    {"q": "Какая из перечисленных структур не формирует линию связок?",
+    "options": ["Удерживающая глазничная связка (ORL)", "Височная адгезия", "Скуловая связка"],
+    "answer": "Удерживающая глазничная связка (ORL)"},
+    {"q": "Какая мышца не входит в состав SMAS?",
+    "options": ["Височная мыщца", "Лобное брюшко затылочно-лобной мыщцы", "Ушно-височная мышца"],
+    "answer": "Височная мыщца"},
+    {"q": "По какому из анастомозов эмбол может попасть в бассейн глазной артерии?",
+    "options": ["Глубокая височная артерия — скуловисочная артерия", "Поперечная артерия лица — подглазничная артерия", "Угловая артерия — подглазничная артерия"],
+    "answer": "Глубокая височная артерия — скуловисочная артерия"},
+    {"q": "Какая мышца отвечает за опущение хвоста брови?",
+    "options": ["Круговая мышца глаза", "Мышца гордецов", "Мышца, опускающая бровь"],
+    "answer": "Круговая мышца глаза"},
+    {"q": "Наиболее частый мимический паттерн нижней трети лица",
+    "options": ["Содружественный (DAO + platysma)", "Комбинированный (DAO + platysma + m. mentalis)", "Изолированный (работает только DAO)"],
+    "answer": "Содружественный (DAO + platysma)"},
+    {"q": "Подкожная клетчатка какой области обладает наиболее длинными соединительнотканными септами?",
+    "options": ["Щёчной", "Околоушно-жевательной", "Подглазничной (малярный жировой пакет)"],
+    "answer": "Щёчной"}
 ]
 
 # ================== JSON ФУНКЦИИ ==================
@@ -58,9 +85,9 @@ def save_final_result(user_id: int, data: dict):
     if user_key not in storage:
         storage[user_key] = []
     
-    # Сохраняем только итоговые данные попытки
+    # ПУНКТ: Записываем попытку с баллами и данными, без истории вопросов
     attempt_info = {
-        "attempt_number": len(storage[user_key]) + 1,
+        "attempt": len(storage[user_key]) + 1,
         "score": f"{data.get('score', 0)}/10",
         "name": data.get("name"),
         "email": data.get("email"),
@@ -73,8 +100,9 @@ def save_final_result(user_id: int, data: dict):
         json.dump(storage, f, ensure_ascii=False, indent=4)
 
 def log_new_user(user_id: int, username: str | None):
-    # Проверка на ID бота (чтобы не логгировать самого себя)
-    if str(user_id) == API_TOKEN.split(':')[0]: return
+    # ПУНКТ: ID бота не должен попадать в список пользователей
+    if str(user_id) == API_TOKEN.split(':')[0]:
+        return
     filename = "all_users.json"
     storage = {}
     if os.path.exists(filename):
@@ -87,35 +115,43 @@ def log_new_user(user_id: int, username: str | None):
         json.dump(storage, f, ensure_ascii=False, indent=4)
 
 def is_valid_email(email):
-    # Исправленная регулярка: домен 2-4 символа (пресекает .ruu)
+    # ПУНКТ: Проверка на 2-4 символа домена (.ru, .com и т.д.)
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$'
     return re.match(pattern, email)
 
-# ================== ХЭНДЛЕРЫ ==================
-
+# ================== /START ==================
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
     log_new_user(message.from_user.id, message.from_user.username)
-    
+
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🟢 Принять участие", callback_data="accept")],
         [InlineKeyboardButton(text="❌ Не хочу продолжать", callback_data="decline")]
     ])
-    await message.answer(
-        "Добро пожаловать в официальный Telegram-бот журнала «Облик. Esthetic Guide». "
-        "С нашим ботом вы сможете проверить и актуализировать знания по анатомии лица. "
-        "Отвечая на вопросы, выбирайте тот, что считаете верным. "
-        "После прохождения всех 10 вопросов бот покажет вам количество верных. "
-        "При желании вы сможете пройти тест несколько раз, добившись идеального результата!",
-        reply_markup=kb
-    )
 
+    await message.answer(
+        "Добро пожаловать в официальный Telegram-бот <b>журнала «Облик. Esthetic Guide»</b>. "
+        "С нашим ботом вы сможете проверить и актуализировать знания по анатомии лица. "
+        "<blockquote>"
+        "Отвечая на вопросы, выбирайте тот ответ, который считаете <b>правильным</b>. "
+        "Всего в тесте 10 вопросов. После их прохождения бот посчитает количество верных ответов. "
+        "При желании вы сможете пройти тест <b>несколько раз</b>, добившись идеального результата!"
+        "</blockquote>\n\n"
+        "🎁 За прохождение теста можно будет получить бесплатный мастер-класс! ",
+        reply_markup=kb,
+        parse_mode="HTML" 
+    )
+    await state.set_state(TestState.waiting_start)
+
+# ================== СБОР ДАННЫХ ==================
 @dp.callback_query(F.data == "accept")
 async def accept_callback(callback: types.CallbackQuery, state: FSMContext):
-    await callback.message.answer("Прежде чем начнём, давайте с вами познакомимся! ✨")
-    await asyncio.sleep(0.5)
-    await callback.message.answer("Для начала напишите свой e-mail 📩")
+    msg1 = await callback.message.answer("Прежде чем начнём, давайте с вами познакомимся! ✨")
+    msg2 = await callback.message.answer("Для начала напишите свой e-mail 📩")
+    
+    # Список для удаления персональных сообщений в будущем
+    await state.update_data(personal_msgs=[msg1.message_id, msg2.message_id])
     await state.set_state(TestState.email)
     await callback.answer()
 
@@ -123,51 +159,68 @@ async def accept_callback(callback: types.CallbackQuery, state: FSMContext):
 async def process_email(message: types.Message, state: FSMContext):
     email = message.text.strip()
     data = await state.get_data()
-    failed_msgs = data.get('failed_msgs', [])
+    f_msgs = data.get('failed_msgs', [])
+    p_msgs = data.get('personal_msgs', [])
 
     if not is_valid_email(email):
-        err = await message.answer("❌ По-моему емейл некорректный!\nПроверьте домен и введите еще раз")
-        failed_msgs.extend([message.message_id, err.message_id])
-        await state.update_data(failed_msgs=failed_msgs)
+        err = await message.answer("❌ Упс! По-моему, e-mail некорректный!\nВведи еще раз")
+        await state.update_data(failed_msgs=f_msgs + [message.message_id, err.message_id])
         return
 
-    # Удаление мусора (ошибок) при успешном вводе
-    for m_id in failed_msgs:
+    # Чистим ошибки
+    for m_id in f_msgs:
         try: await bot.delete_message(message.chat.id, m_id)
         except: pass
     
-    await state.update_data(email=email, failed_msgs=[])
-    await message.answer("Как вас зовут? Напишите Имя и Фамилию - будем знакомы! 😊")
+    msg = await message.answer("Как вас зовут? Напишите Имя и Фамилию 😊")
+    await state.update_data(
+        email=email, 
+        failed_msgs=[], 
+        personal_msgs=p_msgs + [message.message_id, msg.message_id]
+    )
     await state.set_state(TestState.name)
 
 @dp.message(TestState.name)
 async def process_name(message: types.Message, state: FSMContext):
-    await state.update_data(name=message.text.strip())
-    await message.answer("Из какого вы города? 🌍")
+    msg = await message.answer("Из какого вы города? 🌍")
+    data = await state.get_data()
+    await state.update_data(
+        name=message.text.strip(), 
+        personal_msgs=data.get('personal_msgs', []) + [message.message_id, msg.message_id]
+    )
     await state.set_state(TestState.city)
 
 @dp.message(TestState.city)
 async def process_city(message: types.Message, state: FSMContext):
-    await state.update_data(city=message.text.strip())
-    # Кнопка запроса контакта
     kb = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="📱 Отправить контакт", request_contact=True)]],
-        resize_keyboard=True,
-        one_time_keyboard=True
+        resize_keyboard=True, one_time_keyboard=True
     )
-    await message.answer("И номер телефона для связи 👇", reply_markup=kb)
+    msg = await message.answer("И номер телефона для связи 👇", reply_markup=kb)
+    data = await state.get_data()
+    await state.update_data(
+        city=message.text.strip(), 
+        personal_msgs=data.get('personal_msgs', []) + [message.message_id, msg.message_id]
+    )
     await state.set_state(TestState.phone)
 
 @dp.message(TestState.phone)
 async def process_phone(message: types.Message, state: FSMContext):
     phone = message.contact.phone_number if message.contact else message.text
-    await state.update_data(phone=phone, score=0, current_q=0)
-    await message.answer("🎯 Ну что ж, пора переходить к тесту!", reply_markup=ReplyKeyboardRemove())
-    await asyncio.sleep(0.8)
+    data = await state.get_data()
+    p_msgs = data.get('personal_msgs', []) + [message.message_id]
+    
+    # ПУНКТ: Удаляем все сообщения с персональными данными перед тестом
+    for m_id in p_msgs:
+        try: await bot.delete_message(message.chat.id, m_id)
+        except: pass
+
+    await state.update_data(phone=phone, score=0, current_q=0, personal_msgs=[])
+    await message.answer("Спасибо, что рассказали о себе!" "🎯 Ну что ж, пора переходить <b>к тесту</b>!", reply_markup=ReplyKeyboardRemove())
+    await asyncio.sleep(0.5)
     await send_question(message, state)
 
-# ================== ТЕСТОВАЯ ЛОГИКА ==================
-
+# ================== ТЕСТ ==================
 async def send_question(message: types.Message, state: FSMContext):
     data = await state.get_data()
     idx = data.get("current_q", 0)
@@ -176,27 +229,24 @@ async def send_question(message: types.Message, state: FSMContext):
         q_data = questions[idx]
         options = q_data["options"][:]
         random.shuffle(options)
-        
+
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=opt, callback_data=f"ans_{idx}_{i}")] for i, opt in enumerate(options)
         ])
         
         await state.update_data(current_options=options)
-        # Визуальная задержка "печатает..."
         await bot.send_chat_action(message.chat.id, "typing")
-        await asyncio.sleep(0.5)
         await message.answer(f"Вопрос {idx+1}/10:\n\n{q_data['q']}", reply_markup=kb)
         await state.set_state(TestState.question)
     else:
-        # Только одна кнопка
+        # ПУНКТ: Только одна кнопка
         kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🎯 Подвести итоги", callback_data="results")]])
-        await message.answer("✅ Ну что, весь тест пройден! Хочешь узнать итоги?", reply_markup=kb)
+        await message.answer("✅ Вопросы закончились! Получается, что весь тест пройден. Хотите узнать итоги?", reply_markup=kb)
 
 @dp.callback_query(F.data.startswith("ans_"))
 async def check_answer(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    idx = int(callback.data.split("_")[1])
-    opt_idx = int(callback.data.split("_")[2])
+    idx, opt_idx = int(callback.data.split("_")[1]), int(callback.data.split("_")[2])
     
     options = data.get("current_options")
     if options[opt_idx] == questions[idx]["answer"]:
@@ -205,58 +255,52 @@ async def check_answer(callback: types.CallbackQuery, state: FSMContext):
     else:
         await callback.answer("Неверно ❌")
 
-    # Удаление старого вопроса
+    # ПУНКТ: Красивое удаление вопроса
     try: await callback.message.delete()
     except: pass
 
     await state.update_data(current_q=idx + 1)
     await send_question(callback.message, state)
 
+# ================== ИТОГИ И МАСТЕР-КЛАСС ==================
 @dp.callback_query(F.data == "results")
-async def show_final_results(callback: types.CallbackQuery, state: FSMContext):
+async def show_results(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     score = data.get("score", 0)
     save_final_result(callback.from_user.id, data)
-
-    # Текст финала по ТЗ
-    txt = (f"Ваш результат: {score}/10. За прохождение вы получаете мастер класс, "
-           "который будет в скором времени выслан вам на указанную электронную почту "
-           "вне зависимости от результатов теста. Спасибо что были с нами!")
-
+    
+    if score >= 9: txt = "🟢 Отличные знания анатомии!"
+    elif score >= 7: txt = "🟡 Есть, что повторить!"
+    else: txt = "🔴 Анатомия забыта!"
+    
+    # ПУНКТ: ТРИ КНОПКИ У СООБЩЕНИЯ С РЕЗУЛЬТАТОМ
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎁 Получить мастер-класс", url="https://t.me/oblik_journal")],
-        [InlineKeyboardButton(text="🔄 Пройти тест заново", callback_data="retry_test")],
-        [InlineKeyboardButton(text="🗑 Запустить бота с нуля", callback_data="restart_full")]
+        [InlineKeyboardButton(text="🎁 Как получить мастер-класс?", callback_data="get_mc")],
+        [InlineKeyboardButton(text="🔄 Пройти тест заново", callback_data="retry")],
+        [InlineKeyboardButton(text="🗑 Сбросить бота (с нуля)", callback_data="full_reset")]
     ])
+    await callback.message.edit_text(f"{txt}\nВаш результат: {score}/10", reply_markup=kb)
 
-    try: await callback.message.delete()
-    except: pass
-    await callback.message.answer(txt, reply_markup=kb)
+@dp.callback_query(F.data == "get_mc")
+async def show_mc_info(callback: types.CallbackQuery):
+    # ПУНКТ: ВЫЛЕЗАЕТ СООБЩЕНИЕ ПРО МАСТЕР-КЛАСС ПРИ НАЖАТИИ
+    txt = ("За прохождение вы получаете мастер-класс, который будет в скором времени выслан вам "
+           "на указанную электронную почту командой «Облик» вне зависимости от результатов теста.")
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад к результатам", callback_data="results")]])
+    await callback.message.edit_text(txt, reply_markup=kb)
 
-# ================== КНОПКИ ФИНАЛА ==================
-
-@dp.callback_query(F.data == "retry_test")
-async def retry_test(callback: types.CallbackQuery, state: FSMContext):
-    # Оставляем данные юзера, сбрасываем только тест
+@dp.callback_query(F.data == "retry")
+async def retry(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(current_q=0, score=0)
     try: await callback.message.delete()
     except: pass
     await send_question(callback.message, state)
 
-@dp.callback_query(F.data == "restart_full")
-async def restart_full(callback: types.CallbackQuery, state: FSMContext):
-    # Полный сброс (удаление из стейта)
+@dp.callback_query(F.data == "full_reset")
+async def full_reset(callback: types.CallbackQuery, state: FSMContext):
     try: await callback.message.delete()
     except: pass
     await cmd_start(callback.message, state)
 
-@dp.callback_query(F.data == "decline")
-async def decline_callback(callback: types.CallbackQuery):
-    await callback.message.edit_text("Очень жаль! Если передумаете — напишите /start")
-
-# ================== ЗАПУСК ==================
-async def main():
-    await dp.start_polling(bot)
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(dp.start_polling(bot))
