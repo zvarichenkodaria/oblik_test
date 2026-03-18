@@ -16,6 +16,7 @@ from aiogram.client.default import DefaultBotProperties
 
 # ================== НАСТРОЙКИ ==================
 
+logging.basicConfig(level=logging.INFO)
 session = AiohttpSession(timeout=60)
 API_TOKEN = os.getenv("BOT_TOKEN")
 
@@ -39,7 +40,7 @@ class TestState(StatesGroup):
 # ================== СЛУЖЕБНЫЕ ФУНКЦИИ (ОЧИСТКА) ==================
 
 async def clear_stored_messages(chat_id: int, state: FSMContext):
-    """Удаляет все сообщения, ID которых были сохранены в списке msgs_to_delete"""
+    """Удаляет всё, что накопилось в списке msgs_to_delete"""
     data = await state.get_data()
     msg_ids = data.get("msgs_to_delete", [])
     for m_id in msg_ids:
@@ -50,7 +51,7 @@ async def clear_stored_messages(chat_id: int, state: FSMContext):
     await state.update_data(msgs_to_delete=[])
 
 async def add_to_delete(state: FSMContext, *messages: types.Message | int):
-    """Добавляет ID сообщений в список на удаление"""
+    """Добавляет сообщения в список на будущее удаление"""
     data = await state.get_data()
     current_ids = data.get("msgs_to_delete", [])
     for msg in messages:
@@ -61,7 +62,7 @@ async def add_to_delete(state: FSMContext, *messages: types.Message | int):
     await state.update_data(msgs_to_delete=current_ids)
 
 async def clear_chat_history(chat_id: int):
-    """Безопасная очистка только сообщений БОТА"""
+    """Очистка истории сообщений бота (для команды decline)"""
     try:
         chat_history = await bot.get_chat_history(chat_id, limit=20)
         for msg in chat_history:
@@ -99,22 +100,12 @@ def save_final_result(user_id: int, data: dict):
     user_key = str(user_id)
     if user_key not in storage: storage[user_key] = []
     attempt_info = {
-        "attempt": len(storage[user_key]) + 1, "score": f"{data.get('score', 0)}/10",
+        "attempt": len(storage[user_key]) + 1,
+        "score": f"{data.get('score', 0)}/10",
         "name": data.get("name"), "email": data.get("email"),
         "city": data.get("city"), "phone": data.get("phone")
     }
     storage[user_key].append(attempt_info)
-    with open(filename, "w", encoding="utf-8") as f: json.dump(storage, f, ensure_ascii=False, indent=4)
-
-def log_new_user(user_id: int, username: str | None):
-    if str(user_id) == API_TOKEN.split(':')[0]: return
-    filename = "all_users.json"
-    storage = {}
-    if os.path.exists(filename):
-        try:
-            with open(filename, "r", encoding="utf-8") as f: storage = json.load(f)
-        except: pass
-    storage[str(user_id)] = username
     with open(filename, "w", encoding="utf-8") as f: json.dump(storage, f, ensure_ascii=False, indent=4)
 
 def is_valid_email(email):
@@ -126,12 +117,11 @@ def is_valid_email(email):
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
-    log_new_user(message.from_user.id, message.from_user.username)
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🟢 Принять участие", callback_data="accept")],
         [InlineKeyboardButton(text="❌ Не хочу продолжать", callback_data="decline")]
     ])
-    await message.answer(
+    welcome_msg = await message.answer(
         "Добро пожаловать в официальный Telegram-бот <b>журнала «Облик. Esthetic Guide»</b>.\n"
         "С нашим ботом вы сможете проверить и актуализировать знания по анатомии лица.\n\n"
         "<blockquote>"
@@ -142,25 +132,39 @@ async def cmd_start(message: types.Message, state: FSMContext):
         "🎁 За прохождение теста можно будет получить бесплатный мастер-класс! ",
         reply_markup=kb, parse_mode="HTML" 
     )
+    await add_to_delete(state, welcome_msg)
     await state.set_state(TestState.waiting_start)
 
 @dp.callback_query(F.data == "accept")
 async def accept_callback(callback: types.CallbackQuery, state: FSMContext):
     msg1 = await callback.message.answer("Прежде чем начнём, давайте с вами познакомимся! ✨")
     msg2 = await callback.message.answer("Для начала напишите свой e-mail 📩")
-    await state.update_data(personal_msgs=[msg1.message_id, msg2.message_id])
+    await add_to_delete(state, msg1, msg2)
     await state.set_state(TestState.email)
     await callback.answer()
 
 @dp.callback_query(F.data == "decline")
 async def decline_callback(callback: types.CallbackQuery, state: FSMContext):
+    # УДАЛЯЕМ всё, что бот успел отправить до этого момента (приветствие, вопросы анкеты)
+    await clear_stored_messages(callback.message.chat.id, state)
+    
+    # Удаляем само сообщение с кнопками Принять/Отклонить
+    try:
+        await callback.message.delete()
+    except:
+        pass
+        
     await state.clear()
-    await clear_chat_history(callback.message.chat.id)
+    
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔘 Перейти в канал «Облик»", url="https://t.me/oblikmagazine")],
         [InlineKeyboardButton(text="🔄 Вернуться к началу", callback_data="restart")]
     ])
-    await callback.message.answer("Благодарим вас за уделенное время! Узнать больше о журнале «Облик» можно на официальном канале.", reply_markup=kb)
+    
+    await callback.message.answer(
+        "Благодарим вас за уделенное время! Узнать больше о журнале «Облик» можно на официальном канале.", 
+        reply_markup=kb
+    )
     await callback.answer()
 
 @dp.callback_query(F.data == "restart")
@@ -173,41 +177,45 @@ async def restart_test(callback: types.CallbackQuery, state: FSMContext):
 @dp.message(TestState.email)
 async def process_email(message: types.Message, state: FSMContext):
     email = message.text.strip()
-    data = await state.get_data()
     if not is_valid_email(email):
         err = await message.answer("❌ Упс! По-моему, e-mail некорректный!\nВведи еще раз")
-        await state.update_data(failed_msgs=data.get('failed_msgs', []) + [message.message_id, err.message_id])
+        await add_to_delete(state, message, err)
         return
-    for m_id in data.get('failed_msgs', []):
-        try: await bot.delete_message(message.chat.id, m_id)
-        except: pass
     msg = await message.answer("Как вас зовут? Напишите Имя и Фамилию 😊")
-    await state.update_data(email=email, failed_msgs=[], personal_msgs=data.get('personal_msgs', []) + [message.message_id, msg.message_id])
+    await state.update_data(email=email)
+    await add_to_delete(state, message, msg)
     await state.set_state(TestState.name)
 
 @dp.message(TestState.name)
 async def process_name(message: types.Message, state: FSMContext):
     msg = await message.answer("Из какого вы города? 🌍")
-    data = await state.get_data()
-    await state.update_data(name=message.text.strip(), personal_msgs=data.get('personal_msgs', []) + [message.message_id, msg.message_id])
+    await state.update_data(name=message.text.strip())
+    await add_to_delete(state, message, msg)
     await state.set_state(TestState.city)
 
 @dp.message(TestState.city)
 async def process_city(message: types.Message, state: FSMContext):
     kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="📱 Отправить контакт", request_contact=True)]], resize_keyboard=True, one_time_keyboard=True)
     msg = await message.answer("И номер телефона для связи 👇", reply_markup=kb)
-    data = await state.get_data()
-    await state.update_data(city=message.text.strip(), personal_msgs=data.get('personal_msgs', []) + [message.message_id, msg.message_id])
+    await state.update_data(city=message.text.strip())
+    await add_to_delete(state, message, msg)
     await state.set_state(TestState.phone)
 
 @dp.message(TestState.phone)
 async def process_phone(message: types.Message, state: FSMContext):
     phone = message.contact.phone_number if message.contact else message.text
     await add_to_delete(state, message)
+    
+    # Сразу удаляем анкету
     await clear_stored_messages(message.chat.id, state)
-    transition_msg = await message.answer("Спасибо, что рассказали о себе!\n🎯 Ну что ж, пора переходить <b>к тесту</b>!", reply_markup=ReplyKeyboardRemove())
-    await add_to_delete(state, transition_msg)
-    await state.update_data(phone=phone, score=0, current_q=0)
+
+    transition_msg = await message.answer(
+        "Спасибо, что рассказали о себе!\n🎯 Ну что ж, пора переходить <b>к тесту</b>!", 
+        reply_markup=ReplyKeyboardRemove()
+    )
+    # Сохраняем transition_id отдельно, чтобы грохнуть при сбросе бота
+    await state.update_data(phone=phone, score=0, current_q=0, transition_id=transition_msg.message_id)
+    
     await asyncio.sleep(0.5)
     await send_question(message, state)
 
@@ -218,32 +226,75 @@ async def send_question(message: types.Message, state: FSMContext):
         q_data = questions[idx]
         options = q_data["options"][:]
         random.shuffle(options)
-        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=options[i], callback_data=f"ans_{idx}_{i}")] for i in range(3)])
+        
+        # Кнопки с твоим стилем
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=options[0], callback_data=f"ans_{idx}_0")],
+            [InlineKeyboardButton(text=options[1], callback_data=f"ans_{idx}_1")],
+            [InlineKeyboardButton(text=options[2], callback_data=f"ans_{idx}_2")],
+            [InlineKeyboardButton(text="🔄 Начать тест заново", callback_data="retry")]
+        ])
+        
         await state.update_data(current_options=options)
-        await message.answer(f"✔️ Вопрос {idx+1}/10:\n\n{q_data['q']}", reply_markup=kb)
+        sent_q = await message.answer(f"✔️ Вопрос {idx+1}/10:\n\n{q_data['q']}", reply_markup=kb)
+        await add_to_delete(state, sent_q)
         await state.set_state(TestState.question)
     else:
-        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🎯 Подвести итоги", callback_data="results")]])
-        await message.answer("✅ Вопросы закончились! Получается, что весь тест пройден. Хотите узнать итоги?", reply_markup=kb)
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🎯 Подвести итоги", callback_data="results")],
+            [InlineKeyboardButton(text="🔄 Начать тест заново", callback_data="retry")]
+        ])
+        sent_final = await message.answer("✅ Вопросы закончились! Получается, что весь тест пройден. Хотите узнать итоги?", reply_markup=kb)
+        await add_to_delete(state, sent_final)
 
 @dp.callback_query(F.data.startswith("ans_"))
 async def check_answer(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     idx, opt_idx = int(callback.data.split("_")[1]), int(callback.data.split("_")[2])
-    if data.get("current_options")[opt_idx] == questions[idx]["answer"]:
+    options = data.get("current_options")
+    
+    if options[opt_idx] == questions[idx]["answer"]:
         await state.update_data(score=data.get("score", 0) + 1)
         await callback.answer("Верно! ✅")
-    else: await callback.answer("Неверно ❌")
-    try: await callback.message.delete()
-    except: pass
+    else: 
+        await callback.answer("Неверно ❌")
+
+    # Чистим старый вопрос перед новым
+    await clear_stored_messages(callback.message.chat.id, state)
     await state.update_data(current_q=idx + 1)
     await send_question(callback.message, state)
 
 @dp.callback_query(F.data == "results")
 async def show_results(callback: types.CallbackQuery, state: FSMContext):
+    await clear_stored_messages(callback.message.chat.id, state)
     data = await state.get_data()
     score = data.get("score", 0)
     save_final_result(callback.from_user.id, data)
+    
+    status = "🟢 Отличные знания анатомии!" if score >= 9 else "🟡 Есть, что повторить!" if score >= 7 else "🔴 Анатомия забыта!"
+    txt = f"Благодарим за прохождение теста! Ваш результат:\n\n<b>{status}</b>\n{score} из 10 правильных ответов."
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎁 Как получить мастер-класс?", callback_data="get_mc")],
+        [InlineKeyboardButton(text="🔄 Пройти тест заново", callback_data="retry")],
+        [InlineKeyboardButton(text="🗑 Сбросить бота (с нуля)", callback_data="full_reset")]
+    ])
+    await callback.message.answer(txt, reply_markup=kb, parse_mode="HTML")
+
+@dp.callback_query(F.data == "get_mc")
+async def show_mc_info(callback: types.CallbackQuery):
+    txt = (
+        "За <b>прохождение</b> теста вы получаете <b>мастер-класс</b> от журнала «Облик»!\n\n"
+        "В течение суток он будет выслан вам на указанную электронную почту. 🕔 <i>Ждите!</i>\n\n"
+        "Спасибо, что остаётесь с нами ❤️"
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад к результатам", callback_data="results_back")]])
+    await callback.message.edit_text(txt, reply_markup=kb, parse_mode="HTML")
+
+@dp.callback_query(F.data == "results_back")
+async def show_results_back(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    score = data.get("score", 0)
     status = "🟢 Отличные знания анатомии!" if score >= 9 else "🟡 Есть, что повторить!" if score >= 7 else "🔴 Анатомия забыта!"
     txt = f"Благодарим за прохождение теста! Ваш результат:\n\n<b>{status}</b>\n{score} из 10 правильных ответов."
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -253,30 +304,31 @@ async def show_results(callback: types.CallbackQuery, state: FSMContext):
     ])
     await callback.message.edit_text(txt, reply_markup=kb, parse_mode="HTML")
 
-@dp.callback_query(F.data == "get_mc")
-async def show_mc_info(callback: types.CallbackQuery):
-    txt = "За <b>прохождение</b> теста вы получаете <b>мастер-класс</b>!\n\nВ течение суток он будет выслан вам на почту. ❤️"
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад к результатам", callback_data="results")]])
-    await callback.message.edit_text(txt, reply_markup=kb, parse_mode="HTML")
-
 @dp.callback_query(F.data == "retry")
 async def retry(callback: types.CallbackQuery, state: FSMContext):
+    await clear_stored_messages(callback.message.chat.id, state)
     await state.update_data(current_q=0, score=0)
     try: await callback.message.delete()
     except: pass
     await send_question(callback.message, state)
+    await callback.answer("Тест начат заново")
 
 @dp.callback_query(F.data == "full_reset")
 async def full_reset(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    t_id = data.get("transition_id")
+    
     await clear_stored_messages(callback.message.chat.id, state)
+    
+    if t_id:
+        try: await bot.delete_message(callback.message.chat.id, t_id)
+        except: pass
+        
     try: await callback.message.delete()
     except: pass
+    
     await state.clear()
     await cmd_start(callback.message, state)
 
-# САМАЯ ВАЖНАЯ СТРОЧКА В КОНЦЕ
-async def main():
-    await dp.start_polling(bot)
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(dp.start_polling(bot))
