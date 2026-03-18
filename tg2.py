@@ -11,7 +11,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.client.session.aiohttp import AiohttpSession
-from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
@@ -39,14 +38,17 @@ class TestState(StatesGroup):
 
 # ================== НОВАЯ ФУНКЦИЯ ОЧИСТКИ ==================
 async def clear_chat_history(chat_id: int):
-    """Удаляет последние 20 сообщений бота из чата"""
+    """Безопасная очистка только сообщений БОТА"""
     try:
-        for i in range(1, 21):  # Пробуем удалить последние 20 сообщений
-            try:
-                await bot.delete_message(chat_id, i)
-            except:
-                pass
-        await asyncio.sleep(0.5)  # Пауза чтобы API не забанил
+        # Получаем реальные message_id сообщений бота
+        chat_history = await bot.get_chat_history(chat_id, limit=20)
+        for msg in chat_history:
+            if msg.from_user.is_bot:  # Только свои сообщения
+                try:
+                    await bot.delete_message(chat_id, msg.message_id)
+                    await asyncio.sleep(0.1)
+                except:
+                    pass
     except:
         pass
 
