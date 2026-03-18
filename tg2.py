@@ -132,7 +132,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
     await message.answer(
         "Добро пожаловать в официальный Telegram-бот <b>журнала «Облик. Esthetic Guide»</b>.\n"
-        "С нашим ботом вы сможете проверить и актуализировать знания по анатомии лица.\n"
+        "С нашим ботом вы сможете проверить и актуализировать знания по анатомии лица.\n\n"
         "<blockquote>"
         "Отвечая на вопросы, выбирайте тот ответ, который считаете <b>правильным</b>. "
         "Всего в тесте 10 вопросов. После их прохождения бот посчитает количество верных ответов. "
@@ -157,23 +157,26 @@ async def accept_callback(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data == "decline")
 async def decline_callback(callback: types.CallbackQuery, state: FSMContext):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔘 Перейти в канал «Облик»", url="https://t.me/oblikmagazine")],
+        [InlineKeyboardButton(text="🔄 Вернуться к началу", callback_data="restart")]
+    ])
+    await callback.message.edit_text(
+        "Благодарим вас за уделенное время! Узнать больше о журнале «Облик» можно на официальном канале.",
+        reply_markup=kb
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data == "restart")  # ← НОВЫЙ ХЕНДЛЕР
+async def restart_test(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     
     try:
-        # Удаляем главное сообщение с кнопками
         await callback.message.delete()
     except:
         pass
     
-    # Отправляем прощание и удаляем через 2 сек
-    msg = await callback.message.answer("Спасибо, что зашли! До свидания! 👋")
-    await asyncio.sleep(2)
-    try:
-        await msg.delete()
-    except:
-        pass
-    
-    await callback.answer()
+    await cmd_start(callback.message, state)
 
 @dp.message(TestState.email)
 async def process_email(message: types.Message, state: FSMContext):
@@ -236,7 +239,7 @@ async def process_phone(message: types.Message, state: FSMContext):
         except: pass
 
     await state.update_data(phone=phone, score=0, current_q=0, personal_msgs=[])
-    await message.answer("Спасибо, что рассказали о себе!" "🎯 Ну что ж, пора переходить <b>к тесту</b>!", reply_markup=ReplyKeyboardRemove())
+    await message.answer("Спасибо, что рассказали о себе!\n" "🎯 Ну что ж, пора переходить <b>к тесту</b>!", reply_markup=ReplyKeyboardRemove())
     await asyncio.sleep(0.5)
     await send_question(message, state)
 
@@ -256,7 +259,7 @@ async def send_question(message: types.Message, state: FSMContext):
         
         await state.update_data(current_options=options)
         await bot.send_chat_action(message.chat.id, "typing")
-        await message.answer(f"Вопрос {idx+1}/10:\n\n{q_data['q']}", reply_markup=kb)
+        await message.answer(f"✔️ Вопрос {idx+1}/10:\n\n{q_data['q']}", reply_markup=kb)
         await state.set_state(TestState.question)
     else:
         # ПУНКТ: Только одна кнопка
