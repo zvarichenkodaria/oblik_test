@@ -170,7 +170,7 @@ async def accept_callback(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(TestState.email)
     await callback.answer()
 
-@dp.callback_query(F.data == "decline", state="*")
+@dp.callback_query(F.data == "decline")
 async def decline_callback(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     
