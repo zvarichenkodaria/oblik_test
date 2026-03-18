@@ -37,6 +37,19 @@ class TestState(StatesGroup):
     question = State()
     results = State()
 
+# ================== НОВАЯ ФУНКЦИЯ ОЧИСТКИ ==================
+async def clear_chat_history(chat_id: int):
+    """Удаляет последние 20 сообщений бота из чата"""
+    try:
+        for i in range(1, 21):  # Пробуем удалить последние 20 сообщений
+            try:
+                await bot.delete_message(chat_id, i)
+            except:
+                pass
+        await asyncio.sleep(0.5)  # Пауза чтобы API не забанил
+    except:
+        pass
+
 # ================== ВОПРОСЫ (ВСЕ 10 ШТУК) ==================
 questions = [
     {"q": "Какую структуру можно повредить в межфасциальном пространстве височной области?",
@@ -155,19 +168,24 @@ async def accept_callback(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(TestState.email)
     await callback.answer()
 
-@dp.callback_query(F.data == "decline")
+@dp.callback_query(F.data == "decline", state="*")
 async def decline_callback(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    
+    # ✅ ОЧИСТКА ВСЕХ СООБЩЕНИЙ ПРИ "НЕ ХОЧУ"
+    await clear_chat_history(callback.message.chat.id)
+    
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔘 Перейти в канал «Облик»", url="https://t.me/oblikmagazine")],
         [InlineKeyboardButton(text="🔄 Вернуться к началу", callback_data="restart")]
     ])
-    await callback.message.edit_text(
+    await callback.message.answer(
         "Благодарим вас за уделенное время! Узнать больше о журнале «Облик» можно на официальном канале.",
         reply_markup=kb
     )
     await callback.answer()
 
-@dp.callback_query(F.data == "restart")  # ← НОВЫЙ ХЕНДЛЕР
+@dp.callback_query(F.data == "restart")
 async def restart_test(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     
@@ -254,7 +272,9 @@ async def send_question(message: types.Message, state: FSMContext):
         random.shuffle(options)
 
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=opt, callback_data=f"ans_{idx}_{i}")] for i, opt in enumerate(options)
+            [InlineKeyboardButton(text=options[0], callback_data=f"ans_{idx}_0")],
+            [InlineKeyboardButton(text=options[1], callback_data=f"ans_{idx}_1")],
+            [InlineKeyboardButton(text=options[2], callback_data=f"ans_{idx}_2")]
         ])
         
         await state.update_data(current_options=options)
@@ -292,9 +312,15 @@ async def show_results(callback: types.CallbackQuery, state: FSMContext):
     score = data.get("score", 0)
     save_final_result(callback.from_user.id, data)
     
-    if score >= 9: txt = "🟢 Отличные знания анатомии!"
-    elif score >= 7: txt = "🟡 Есть, что повторить!"
-    else: txt = "🔴 Анатомия забыта!"
+    if score >= 9: 
+        status = "🟢 Отличные знания анатомии!"
+    elif score >= 7: 
+        status = "🟡 Есть, что повторить!"
+    else: 
+        status = "🔴 Анатомия забыта!"
+    
+    # ПУНКТ: НОВЫЙ ТЕКСТ
+    txt = f"Благодарим за прохождение теста! Ваш результат:\n\n<b>{status}</b>\n{score} из 10 правильных ответов."
     
     # ПУНКТ: ТРИ КНОПКИ У СООБЩЕНИЯ С РЕЗУЛЬТАТОМ
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -302,15 +328,18 @@ async def show_results(callback: types.CallbackQuery, state: FSMContext):
         [InlineKeyboardButton(text="🔄 Пройти тест заново", callback_data="retry")],
         [InlineKeyboardButton(text="🗑 Сбросить бота (с нуля)", callback_data="full_reset")]
     ])
-    await callback.message.edit_text(f"{txt}\nВаш результат: {score}/10", reply_markup=kb)
+    await callback.message.edit_text(txt, reply_markup=kb, parse_mode="HTML")
 
 @dp.callback_query(F.data == "get_mc")
 async def show_mc_info(callback: types.CallbackQuery):
     # ПУНКТ: ВЫЛЕЗАЕТ СООБЩЕНИЕ ПРО МАСТЕР-КЛАСС ПРИ НАЖАТИИ
-    txt = ("За прохождение вы получаете мастер-класс, который будет в скором времени выслан вам "
-           "на указанную электронную почту командой «Облик» вне зависимости от результатов теста.")
+    txt = (
+        "За <b>прохождение</b> теста вы получаете <b>мастер-класс</b> от журнала «Облик»!\n\n"
+        "В течение суток он будет выслан вам на указанную электронную почту. 🕔 <i>Ждите!</i>\n\n"
+        "Спасибо, что остаётесь с нами ❤️"
+    )
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад к результатам", callback_data="results")]])
-    await callback.message.edit_text(txt, reply_markup=kb)
+    await callback.message.edit_text(txt, reply_markup=kb, parse_mode="HTML")
 
 @dp.callback_query(F.data == "retry")
 async def retry(callback: types.CallbackQuery, state: FSMContext):
@@ -321,8 +350,11 @@ async def retry(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data == "full_reset")
 async def full_reset(callback: types.CallbackQuery, state: FSMContext):
-    try: await callback.message.delete()
-    except: pass
+    await state.clear()
+    
+    # ✅ ОЧИСТКА ВСЕХ СООБЩЕНИЙ ПРИ "СБРОСИТЬ БОТА"
+    await clear_chat_history(callback.message.chat.id)
+    
     await cmd_start(callback.message, state)
 
 if __name__ == "__main__":
