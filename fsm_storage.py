@@ -26,3 +26,27 @@ def _load_fsm():
 
 def _save_fsm():
     save_fsm_data(_fsm_storage)
+
+async def ensure_fsm_data(user_id: int) -> Dict[str, Any]:
+    uid = str(user_id)
+    if uid not in _fsm_storage:
+        _fsm_storage[uid] = {"state": None, "data": {}}
+    return _fsm_storage[uid]
+
+async def update_fsm_data(user_id: int, **data):
+    fs = await ensure_fsm_data(user_id)
+    fs["data"].update(data)
+    _save_fsm()
+
+async def set_fsm_state(user_id: int, state: str):
+    fs = await ensure_fsm_data(user_id)
+    fs["state"] = state
+    _save_fsm()
+
+async def get_fsm_data(user_id: int) -> Dict[str, Any]:
+    fs = await ensure_fsm_data(user_id)
+    return fs["data"]
+
+async def get_fsm_state(user_id: int) -> str | None:
+    fs = await ensure_fsm_data(user_id)
+    return fs["state"]
