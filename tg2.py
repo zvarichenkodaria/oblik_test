@@ -14,9 +14,6 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
-# ================== FSM STORAGE ==================
-from fsm_storage import _load_fsm, _save
-
 # ================== НАСТРОЙКИ ==================
 
 logging.basicConfig(level=logging.INFO)
