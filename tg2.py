@@ -4,7 +4,6 @@ import json
 import os
 import random
 import re
-from typing import Dict, Any
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -15,15 +14,8 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
-# ================== ФСМ-ХРАНИЛИЩЕ в JSON ==================
-from fsm_storage import (
-    _load_fsm,
-    _save_fsm,
-    update_fsm_data,
-    set_fsm_state,
-    get_fsm_data,
-    get_fsm_state,
-)
+# ================== FSM STORAGE ==================
+from fsm_storage import _load_fsm, _save
 
 # ================== НАСТРОЙКИ ==================
 
@@ -120,7 +112,7 @@ def save_final_result(user_id: int, data: dict):
     with open(filename, "w", encoding="utf-8") as f: json.dump(storage, f, ensure_ascii=False, indent=4)
 
 def is_valid_email(email):
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,4}$'
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$'
     return re.match(pattern, email)
 
 # ================== ХЕНДЛЕРЫ ==================
@@ -133,23 +125,18 @@ async def cmd_start(message: types.Message, state: FSMContext):
         [InlineKeyboardButton(text="❌ Не хочу продолжать", callback_data="decline")]
     ])
     welcome_msg = await message.answer(
-        "Добро пожаловать в официальный Telegram-бот <b>журнала «Облик. Esthetic Guide»</b>.\\n"
-        "С нашим ботом вы сможете проверить и актуализировать знания по анатомии лица.\\n\\n"
+        "Добро пожаловать в официальный Telegram-бот <b>журнала «Облик. Esthetic Guide»</b>.\n"
+        "С нашим ботом вы сможете проверить и актуализировать знания по анатомии лица.\n\n"
         "<blockquote>"
         "Отвечая на вопросы, выбирайте тот ответ, который считаете <b>правильным</b>. "
         "Всего в тесте 10 вопросов. После их прохождения бот посчитает количество верных ответов. "
         "При желании вы сможете пройти тест <b>несколько раз</b>, добившись идеального результата!"
-        "</blockquote>\\n\\n"
+        "</blockquote>\n\n"
         "🎁 За прохождение теста можно будет получить бесплатный мастер-класс! ",
         reply_markup=kb, parse_mode="HTML" 
     )
     await add_to_delete(state, welcome_msg)
     await state.set_state(TestState.waiting_start)
-    
-    # сохраняем состояние в JSON
-    user_id = message.from_user.id
-    await update_fsm_data(user_id, state="TestState.waiting_start")
-
 
 @dp.callback_query(F.data == "accept")
 async def accept_callback(callback: types.CallbackQuery, state: FSMContext):
@@ -158,10 +145,6 @@ async def accept_callback(callback: types.CallbackQuery, state: FSMContext):
     await add_to_delete(state, msg1, msg2)
     await state.set_state(TestState.email)
     await callback.answer()
-    
-    user_id = callback.from_user.id
-    await set_fsm_state(user_id, "TestState.email")
-
 
 @dp.callback_query(F.data == "decline")
 async def decline_callback(callback: types.CallbackQuery, state: FSMContext):
@@ -187,7 +170,6 @@ async def decline_callback(callback: types.CallbackQuery, state: FSMContext):
     )
     await callback.answer()
 
-
 @dp.callback_query(F.data == "restart")
 async def restart_test(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
@@ -195,23 +177,17 @@ async def restart_test(callback: types.CallbackQuery, state: FSMContext):
     except: pass
     await cmd_start(callback.message, state)
 
-
 @dp.message(TestState.email)
 async def process_email(message: types.Message, state: FSMContext):
     email = message.text.strip()
     if not is_valid_email(email):
-        err = await message.answer("❌ Упс! По-моему, e-mail некорректный!\\nВведи еще раз")
+        err = await message.answer("❌ Упс! По-моему, e-mail некорректный!\nВведи еще раз")
         await add_to_delete(state, message, err)
         return
     msg = await message.answer("Как вас зовут? Напишите Имя и Фамилию 😊")
     await state.update_data(email=email)
     await add_to_delete(state, message, msg)
     await state.set_state(TestState.name)
-
-    user_id = message.from_user.id
-    await update_fsm_data(user_id, email=email)
-    await set_fsm_state(user_id, "TestState.name")
-
 
 @dp.message(TestState.name)
 async def process_name(message: types.Message, state: FSMContext):
@@ -220,11 +196,6 @@ async def process_name(message: types.Message, state: FSMContext):
     await add_to_delete(state, message, msg)
     await state.set_state(TestState.city)
 
-    user_id = message.from_user.id
-    await update_fsm_data(user_id, name=message.text.strip())
-    await set_fsm_state(user_id, "TestState.city")
-
-
 @dp.message(TestState.city)
 async def process_city(message: types.Message, state: FSMContext):
     kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="📱 Отправить контакт", request_contact=True)]], resize_keyboard=True, one_time_keyboard=True)
@@ -232,11 +203,6 @@ async def process_city(message: types.Message, state: FSMContext):
     await state.update_data(city=message.text.strip())
     await add_to_delete(state, message, msg)
     await state.set_state(TestState.phone)
-
-    user_id = message.from_user.id
-    await update_fsm_data(user_id, city=message.text.strip())
-    await set_fsm_state(user_id, "TestState.phone")
-
 
 @dp.message(TestState.phone)
 async def process_phone(message: types.Message, state: FSMContext):
@@ -247,7 +213,7 @@ async def process_phone(message: types.Message, state: FSMContext):
     await clear_stored_messages(message.chat.id, state)
 
     transition_msg = await message.answer(
-        "Спасибо, что рассказали о себе!\\n🎯 Ну что ж, пора переходить <b>к тесту</b>!", 
+        "Спасибо, что рассказали о себе!\n🎯 Ну что ж, пора переходить <b>к тесту</b>!", 
         reply_markup=ReplyKeyboardRemove()
     )
     # Сохраняем transition_id отдельно, чтобы грохнуть при сбросе бота
@@ -255,11 +221,6 @@ async def process_phone(message: types.Message, state: FSMContext):
     
     await asyncio.sleep(0.5)
     await send_question(message, state)
-
-    user_id = message.from_user.id
-    await update_fsm_data(user_id, phone=phone, score=0, current_q=0, transition_id=transition_msg.message_id)
-    await set_fsm_state(user_id, "TestState.question")
-
 
 async def send_question(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -278,13 +239,9 @@ async def send_question(message: types.Message, state: FSMContext):
         ])
         
         await state.update_data(current_options=options)
-        sent_q = await message.answer(f"✔️ Вопрос {idx+1}/10:\\n\\n{q_data['q']}", reply_markup=kb)
+        sent_q = await message.answer(f"✔️ Вопрос {idx+1}/10:\n\n{q_data['q']}", reply_markup=kb)
         await add_to_delete(state, sent_q)
         await state.set_state(TestState.question)
-
-        user_id = message.from_user.id
-        await update_fsm_data(user_id, current_options=options, current_q=idx)
-        await set_fsm_state(user_id, "TestState.question")
     else:
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🎯 Подвести итоги", callback_data="results")],
@@ -293,17 +250,14 @@ async def send_question(message: types.Message, state: FSMContext):
         sent_final = await message.answer("✅ Вопросы закончились! Получается, что весь тест пройден. Хотите узнать итоги?", reply_markup=kb)
         await add_to_delete(state, sent_final)
 
-
 @dp.callback_query(F.data.startswith("ans_"))
 async def check_answer(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     idx, opt_idx = int(callback.data.split("_")[1]), int(callback.data.split("_")[2])
     options = data.get("current_options")
     
-    new_score = data.get("score", 0)
     if options[opt_idx] == questions[idx]["answer"]:
-        new_score += 1
-        await state.update_data(score=new_score)
+        await state.update_data(score=data.get("score", 0) + 1)
         await callback.answer("Верно! ✅")
     else: 
         await callback.answer("Неверно ❌")
@@ -313,12 +267,6 @@ async def check_answer(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(current_q=idx + 1)
     await send_question(callback.message, state)
 
-    # дублируем в JSON
-    user_id = callback.from_user.id
-    await update_fsm_data(user_id, score=new_score, current_q=idx + 1)
-    await set_fsm_state(user_id, "TestState.question")
-
-
 @dp.callback_query(F.data == "results")
 async def show_results(callback: types.CallbackQuery, state: FSMContext):
     await clear_stored_messages(callback.message.chat.id, state)
@@ -327,7 +275,7 @@ async def show_results(callback: types.CallbackQuery, state: FSMContext):
     save_final_result(callback.from_user.id, data)
     
     status = "🟢 Отличные знания анатомии!" if score >= 9 else "🟡 Есть, что повторить!" if score >= 7 else "🔴 Анатомия забыта!"
-    txt = f"Благодарим за прохождение теста! Ваш результат:\\n\\n<b>{status}</b>\\n{score} из 10 правильных ответов."
+    txt = f"Благодарим за прохождение теста! Ваш результат:\n\n<b>{status}</b>\n{score} из 10 правильных ответов."
     
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎁 Как получить мастер-класс?", callback_data="get_mc")],
@@ -336,24 +284,22 @@ async def show_results(callback: types.CallbackQuery, state: FSMContext):
     ])
     await callback.message.answer(txt, reply_markup=kb, parse_mode="HTML")
 
-
 @dp.callback_query(F.data == "get_mc")
 async def show_mc_info(callback: types.CallbackQuery):
     txt = (
-        "За <b>прохождение</b> теста вы получаете <b>мастер-класс</b> от журнала «Облик»!\\n\\n"
-        "В течение суток он будет выслан вам на указанную электронную почту. 🕔 <i>Ждите!</i>\\n\\n"
+        "За <b>прохождение</b> теста вы получаете <b>мастер-класс</b> от журнала «Облик»!\n\n"
+        "В течение суток он будет выслан вам на указанную электронную почту. 🕔 <i>Ждите!</i>\n\n"
         "Спасибо, что остаётесь с нами ❤️"
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад к результатам", callback_data="results_back")]])
     await callback.message.edit_text(txt, reply_markup=kb, parse_mode="HTML")
-
 
 @dp.callback_query(F.data == "results_back")
 async def show_results_back(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     score = data.get("score", 0)
     status = "🟢 Отличные знания анатомии!" if score >= 9 else "🟡 Есть, что повторить!" if score >= 7 else "🔴 Анатомия забыта!"
-    txt = f"Благодарим за прохождение теста! Ваш результат:\\n\\n<b>{status}</b>\\n{score} из 10 правильных ответов."
+    txt = f"Благодарим за прохождение теста! Ваш результат:\n\n<b>{status}</b>\n{score} из 10 правильных ответов."
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎁 Как получить мастер-класс?", callback_data="get_mc")],
         [InlineKeyboardButton(text="🔄 Пройти тест заново", callback_data="retry")],
@@ -361,18 +307,14 @@ async def show_results_back(callback: types.CallbackQuery, state: FSMContext):
     ])
     await callback.message.edit_text(txt, reply_markup=kb, parse_mode="HTML")
 
-
 @dp.callback_query(F.data == "retry")
 async def retry(callback: types.CallbackQuery, state: FSMContext):
     await clear_stored_messages(callback.message.chat.id, state)
     await state.update_data(current_q=0, score=0)
-    try:
-        await callback.message.delete()
-    except:
-        pass
+    try: await callback.message.delete()
+    except: pass
     await send_question(callback.message, state)
     await callback.answer("Тест начат заново")
-
 
 @dp.callback_query(F.data == "full_reset")
 async def full_reset(callback: types.CallbackQuery, state: FSMContext):
@@ -382,23 +324,14 @@ async def full_reset(callback: types.CallbackQuery, state: FSMContext):
     await clear_stored_messages(callback.message.chat.id, state)
     
     if t_id:
-        try:
-            await bot.delete_message(callback.message.chat.id, t_id)
-        except:
-            pass
+        try: await bot.delete_message(callback.message.chat.id, t_id)
+        except: pass
         
-    try:
-        await callback.message.delete()
-    except:
-        pass
+    try: await callback.message.delete()
+    except: pass
     
     await state.clear()
     await cmd_start(callback.message, state)
 
-
 if __name__ == "__main__":
-    _load_fsm()                              # читаем JSON‑состояние бота
-    try:
-        asyncio.run(dp.start_polling(bot))
-    finally:
-        _save_fsm()                          # сохраняем состояние в JSON
+    asyncio.run(dp.start_polling(bot))
