@@ -268,7 +268,7 @@ async def show_confirm_data(message: types.Message, state: FSMContext):
         f"Город: <b>{data.get('city')}</b>\n"
         f"E-mail: <b>{data.get('email')}</b>\n"
         f"Телефон: <b>{data.get('phone')}</b>\n\n"
-        "Если хотите что-то изменить — нажмите на кноки ниже.\n"
+        "Если хотите что-то изменить — нажмите на кнопки ниже.\n"
         "Если вся информация верная — нажмите <b>«Далее»</b>!"
     )
 
@@ -343,7 +343,7 @@ async def confirm_next(callback: types.CallbackQuery, state: FSMContext):
     await clear_stored_messages(callback.message.chat.id, state)
 
     transition_msg = await callback.message.answer(
-        "Спасибо, что рассказали о себе!\nПора переходить <b>к тесту</b>!",
+        "Спасибо, что рассказали о себе!\nПора переходить <b>к тесту</b>.",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode="HTML",
     )
@@ -424,9 +424,9 @@ async def show_results(callback: types.CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "get_mc")
 async def show_mc_info(callback: types.CallbackQuery):
     txt = (
-        "За <b>прохождение</b> теста вы получаете <b>мастер-класс</b> от журнала «Облик»!\n\n"
-        "В течение суток он будет выслан вам на указанную электронную почту. 🕔 <i>Ждите!</i>\n\n"
-        "Спасибо, что остаётесь с нами ❤️"
+        "В подарок для вас анатомический <b>видео-мастер-класс</b> от команды журнала «Облик»!\n\n"
+        "В течение суток он будет выслан вам на указанную электронную почту.\n\n"
+        "До новых встреч!"
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⬅️ Назад к результатам", callback_data="results_back")]
