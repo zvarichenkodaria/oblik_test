@@ -10,6 +10,8 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+# ДОБАВЛЕНО: Импорт хранилища
+from aiogram.fsm.storage.json_file import JSONStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
@@ -23,13 +25,16 @@ logging.basicConfig(level=logging.INFO)
 session = AiohttpSession(timeout=60)
 API_TOKEN = os.getenv("BOT_TOKEN")
 
+# ДОБАВЛЕНО: Инициализация файла для хранения состояний
+storage = JSONStorage("fsm_data.json")
 
 bot = Bot(
     token=API_TOKEN,
     session=session,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML),
 )
-dp = Dispatcher()
+# ИЗМЕНЕНО: Подключение хранилища к диспетчеру
+dp = Dispatcher(storage=storage)
 
 
 # ================== СОСТОЯНИЯ ==================
@@ -72,18 +77,13 @@ async def add_to_delete(state: FSMContext, *messages: types.Message | int):
 
 
 async def clear_chat_history(chat_id: int):
-    """Очистка истории сообщений бота (для команды decline)"""
-    try:
-        chat_history = await bot.get_chat_history(chat_id, limit=20)
-        for msg in chat_history:
-            if msg.from_user.is_bot:
-                try:
-                    await bot.delete_message(chat_id, msg.message_id)
-                    await asyncio.sleep(0.1)
-                except:
-                    pass
-    except:
-        pass
+    """
+    ОЧИСТКА ИСТОРИИ (ИСПРАВЛЕНО): 
+    Метод bot.get_chat_history не существует в Bot API. 
+    Функция оставлена для совместимости, но логика удаления теперь 
+    полностью полагается на add_to_delete и clear_stored_messages.
+    """
+    pass
 
 
 # ================== ВОПРОСЫ ==================
@@ -107,25 +107,25 @@ questions = [
 # ================== JSON ФУНКЦИИ ==================
 def save_final_result(user_id: int, data: dict):
     filename = "users_data.json"
-    storage = {}
+    storage_dict = {}
     if os.path.exists(filename):
         try:
             with open(filename, "r", encoding="utf-8") as f:
-                storage = json.load(f)
+                storage_dict = json.load(f)
         except:
             pass
     user_key = str(user_id)
-    if user_key not in storage:
-        storage[user_key] = []
+    if user_key not in storage_dict:
+        storage_dict[user_key] = []
     attempt_info = {
-        "attempt": len(storage[user_key]) + 1,
+        "attempt": len(storage_dict[user_key]) + 1,
         "score": f"{data.get('score', 0)}/10",
         "name": data.get("name"), "email": data.get("email"),
         "city": data.get("city"), "phone": data.get("phone")
     }
-    storage[user_key].append(attempt_info)
+    storage_dict[user_key].append(attempt_info)
     with open(filename, "w", encoding="utf-8") as f:
-        json.dump(storage, f, ensure_ascii=False, indent=4)
+        json.dump(storage_dict, f, ensure_ascii=False, indent=4)
 
 
 def is_valid_email(email):
