@@ -4,19 +4,19 @@ import json
 import os
 import random
 import re
-import aiosqlite  # Не забудь: pip install aiosqlite
+import aiosqlite  # Не забудь: pip install aiosqlite pandas openpyxl
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.base import BaseStorage, StorageKey
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, FSInputFile
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
-# ================== КЛАСС ДЛЯ ЗАПОМИНАНИЯ (SQLite) ==================
+# ================== КЛАСС ДЛЯ ХРАНЕНИЯ СОСТОЯНИЙ (SQLite) ==================
 
 class SQLiteStorage(BaseStorage):
     def __init__(self, db_path="bot_database.db"):
@@ -60,10 +60,6 @@ class SQLiteStorage(BaseStorage):
                 "ON CONFLICT(key) DO UPDATE SET data = excluded.data",
                 (k, None, json.dumps(data, ensure_ascii=False))
             )
-            await db.execute(
-                "UPDATE fsm_data SET data = ? WHERE key = ?",
-                (json.dumps(data, ensure_ascii=False), k)
-            )
             await db.commit()
 
     async def get_data(self, key: StorageKey):
@@ -75,7 +71,7 @@ class SQLiteStorage(BaseStorage):
 
     async def close(self): pass
 
-# ================== ФУНКЦИЯ СОХРАНЕНИЯ РЕЗУЛЬТАТОВ ==================
+# ================== ФУНКЦИЯ СОХРАНЕНИЯ РЕЗУЛЬТАТОВ В SQL ==================
 
 async def save_final_result_sql(user_id: int, data: dict):
     attempt_info = {
@@ -97,6 +93,9 @@ async def save_final_result_sql(user_id: int, data: dict):
 logging.basicConfig(level=logging.INFO)
 session = AiohttpSession(timeout=60)
 API_TOKEN = os.getenv("BOT_TOKEN")
+
+# ВСТАВЬ СВОЙ ID СЮДА (цифрами, без кавычек)
+ADMIN_ID = 0 
 
 storage = SQLiteStorage()
 bot = Bot(
@@ -181,6 +180,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
         "<blockquote>"
         "Отвечая на вопросы, выбирайте тот ответ, который считаете <b>правильным</b>. "
         "Всего в тесте 10 вопросов. После их прохождения бот посчитает количество верных ответов. "
+        "При желании вы сможете пройти тест <b>несколько раз</b>, добившись идеального результата!"
         "</blockquote>\n\n"
         "Каждому прошедшему тест видео-мастер-класс по анатомии в подарок!",
         reply_markup=kb, parse_mode="HTML"
@@ -206,7 +206,10 @@ async def decline_callback(callback: types.CallbackQuery, state: FSMContext):
         [InlineKeyboardButton(text="🔘 Перейти в канал «Облик»", url="https://t.me/oblikmagazine")],
         [InlineKeyboardButton(text="🔄 Вернуться к началу", callback_data="restart")]
     ])
-    await callback.message.answer("Благодарим за уделенное время!", reply_markup=kb)
+    await callback.message.answer(
+        "Благодарим вас за уделенное время! Узнать больше о журнале «Облик» можно на официальном канале.",
+        reply_markup=kb
+    )
     await callback.answer()
 
 @dp.callback_query(F.data == "restart")
@@ -220,25 +223,25 @@ async def restart_test(callback: types.CallbackQuery, state: FSMContext):
 async def process_email(message: types.Message, state: FSMContext):
     email = message.text.strip()
     if not is_valid_email(email):
-        err = await message.answer("❌ Некорректный e-mail! Введите ещё раз")
+        err = await message.answer("❌ Похоже, e-mail некорректный!\nВведите ещё раз")
         await add_to_delete(state, message, err)
         return
-    await state.update_data(email=email)
     msg = await message.answer("Как вас зовут? Напишите имя и фамилию")
+    await state.update_data(email=email)
     await add_to_delete(state, message, msg)
     await state.set_state(TestState.name)
 
 @dp.message(TestState.name)
 async def process_name(message: types.Message, state: FSMContext):
-    await state.update_data(name=message.text.strip())
     msg = await message.answer("Из какого вы города? 🌍")
+    await state.update_data(name=message.text.strip())
     await add_to_delete(state, message, msg)
     await state.set_state(TestState.city)
 
 @dp.message(TestState.city)
 async def process_city(message: types.Message, state: FSMContext):
     await state.update_data(city=message.text.strip())
-    kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="📱 Отправить контакт", request_contact=True)]], resize_keyboard=True)
+    kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="📱 Отправить контакт", request_contact=True)]], resize_keyboard=True, one_time_keyboard=True)
     msg = await message.answer("И номер телефона для связи 👇", reply_markup=kb)
     await add_to_delete(state, message, msg)
     await state.set_state(TestState.phone)
@@ -247,31 +250,33 @@ async def process_city(message: types.Message, state: FSMContext):
 async def process_phone(message: types.Message, state: FSMContext):
     phone = message.contact.phone_number if message.contact else message.text.strip()
     if not message.contact and not is_valid_phone(phone):
-        err = await message.answer("❌ Некорректный номер! Введите ещё раз")
+        err = await message.answer("❌ Похоже, номер телефона некорректный!\nВведите ещё раз")
         await add_to_delete(state, message, err)
         return
-    await state.update_data(phone=phone)
     await add_to_delete(state, message)
+    await state.update_data(phone=phone)
     await clear_stored_messages(message.chat.id, state)
     await show_confirm_data(message, state)
 
 async def show_confirm_data(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    text = (f"Ваши данные:\nИмя: <b>{data.get('name')}</b>\nГород: <b>{data.get('city')}</b>\n"
-            f"E-mail: <b>{data.get('email')}</b>\nТелефон: <b>{data.get('phone')}</b>")
+    text = (f"Вот ваши введённые данные:\n\nИмя: <b>{data.get('name')}</b>\nГород: <b>{data.get('city')}</b>\n"
+            f"E-mail: <b>{data.get('email')}</b>\nТелефон: <b>{data.get('phone')}</b>\n\n"
+            "Если хотите что-то изменить, нажмите на кнопки ниже.\nЕсли вся информация верная, нажмите <b>«Далее»</b>!")
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Изменить имя", callback_data="change_name"), InlineKeyboardButton(text="Изменить город", callback_data="change_city")],
         [InlineKeyboardButton(text="Изменить e-mail", callback_data="change_email"), InlineKeyboardButton(text="Изменить телефон", callback_data="change_phone")],
         [InlineKeyboardButton(text="➡️ Далее", callback_data="confirm_next")]
     ])
-    msg = await message.answer(text, reply_markup=kb)
+    msg = await message.answer(text, reply_markup=kb, parse_mode="HTML")
     await add_to_delete(state, msg)
     await state.set_state(TestState.confirm)
 
 @dp.callback_query(F.data.startswith("change_"))
 async def change_data(callback: types.CallbackQuery, state: FSMContext):
     field = callback.data.split("_")[1]
-    msg = await callback.message.answer(f"Введите новое значение для {field}:", reply_markup=ReplyKeyboardRemove())
+    prompts = {"name": "Введите новое имя и фамилию:", "city": "Введите новый город:", "email": "Введите новый e-mail:", "phone": "Введите новый номер телефона:"}
+    msg = await callback.message.answer(prompts.get(field, "Введите новое значение:"), reply_markup=ReplyKeyboardRemove())
     await state.update_data(edit_field=field)
     await add_to_delete(state, msg)
     await callback.answer()
@@ -280,8 +285,17 @@ async def change_data(callback: types.CallbackQuery, state: FSMContext):
 async def update_field_value(message: types.Message, state: FSMContext):
     data = await state.get_data()
     edit_field = data.get("edit_field")
-    if edit_field:
-        await state.update_data({edit_field: message.text.strip(), "edit_field": None})
+    if not edit_field: return
+    value = message.text.strip()
+    if edit_field == "email" and not is_valid_email(value):
+        err = await message.answer("❌ Похоже, e-mail некорректный!\nВведите ещё раз")
+        await add_to_delete(state, message, err)
+        return
+    if edit_field == "phone" and not is_valid_phone(value):
+        err = await message.answer("❌ Похоже, номер телефона некорректный!\nВведите ещё раз")
+        await add_to_delete(state, message, err)
+        return
+    await state.update_data({edit_field: value, "edit_field": None})
     await add_to_delete(state, message)
     await clear_stored_messages(message.chat.id, state)
     await show_confirm_data(message, state)
@@ -289,7 +303,7 @@ async def update_field_value(message: types.Message, state: FSMContext):
 @dp.callback_query(F.data == "confirm_next")
 async def confirm_next(callback: types.CallbackQuery, state: FSMContext):
     await clear_stored_messages(callback.message.chat.id, state)
-    transition_msg = await callback.message.answer("Пора переходить к тесту!", reply_markup=ReplyKeyboardRemove())
+    transition_msg = await callback.message.answer("Спасибо, что рассказали о себе!\nПора переходить <b>к тесту</b>.", reply_markup=ReplyKeyboardRemove())
     await state.update_data(score=0, current_q=0, transition_id=transition_msg.message_id)
     await asyncio.sleep(0.5)
     await send_question(callback.message, state)
@@ -306,15 +320,15 @@ async def send_question(message: types.Message, state: FSMContext):
             [InlineKeyboardButton(text=options[0], callback_data=f"ans_{idx}_0")],
             [InlineKeyboardButton(text=options[1], callback_data=f"ans_{idx}_1")],
             [InlineKeyboardButton(text=options[2], callback_data=f"ans_{idx}_2")],
-            [InlineKeyboardButton(text="🔄 Начать заново", callback_data="retry")]
+            [InlineKeyboardButton(text="🔄 Начать тест заново", callback_data="retry")]
         ])
         await state.update_data(current_options=options)
         sent_q = await message.answer(f"✔️ Вопрос {idx+1}/10:\n\n{q_data['q']}", reply_markup=kb)
         await add_to_delete(state, sent_q)
         await state.set_state(TestState.question)
     else:
-        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🎯 Итоги", callback_data="results")]])
-        sent_final = await message.answer("✅ Тест пройден!", reply_markup=kb)
+        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🎯 Подвести итоги", callback_data="results")], [InlineKeyboardButton(text="🔄 Начать тест заново", callback_data="retry")]])
+        sent_final = await message.answer("✅ Вопросы закончились! Получается, что весь тест пройден. Хотите узнать итоги?", reply_markup=kb)
         await add_to_delete(state, sent_final)
 
 @dp.callback_query(F.data.startswith("ans_"))
@@ -336,72 +350,77 @@ async def show_results(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     score = data.get("score", 0)
     await save_final_result_sql(callback.from_user.id, data)
-    status = "🟢 Отлично!" if score >= 9 else "🟡 Хорошо!" if score >= 7 else "🔴 Повторите анатомию!"
-    txt = f"Ваш результат: <b>{score} из 10</b>\n{status}"
+    status = "🟢 Отличные знания анатомии!" if score >= 9 else "🟡 Есть, что повторить!" if score >= 7 else "🔴 Анатомия забыта!"
+    txt = f"Благодарим за прохождение теста! Ваш результат:\n\n<b>{status}</b>\n{score} из 10 правильных ответов."
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎁 Мастер-класс", callback_data="get_mc")],
-        [InlineKeyboardButton(text="🔄 Заново", callback_data="retry")],
-        [InlineKeyboardButton(text="🗑 Сброс", callback_data="full_reset")]
+        [InlineKeyboardButton(text="🎁 Как получить мастер-класс?", callback_data="get_mc")],
+        [InlineKeyboardButton(text="🔄 Пройти тест заново", callback_data="retry")],
+        [InlineKeyboardButton(text="🗑 Сбросить бота (начать с нуля)", callback_data="full_reset")]
     ])
-    await callback.message.answer(txt, reply_markup=kb)
+    await callback.message.answer(txt, reply_markup=kb, parse_mode="HTML")
 
 @dp.callback_query(F.data == "get_mc")
 async def show_mc_info(callback: types.CallbackQuery):
-    await callback.message.edit_text("Видео-мастер-класс будет выслан на почту в течение суток!", 
-                                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="results")]]))
+    txt = ("В подарок для вас анатомический <b>видео-мастер-класс</b> от команды журнала «Облик»!\n\n"
+           "В течение суток он будет выслан вам на указанную электронную почту.\n\nДо новых встреч!")
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад к результатам", callback_data="results_back")]])
+    await callback.message.edit_text(txt, reply_markup=kb, parse_mode="HTML")
+
+@dp.callback_query(F.data == "results_back")
+async def show_results_back(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    score = data.get("score", 0)
+    status = "🟢 Отличные знания анатомии!" if score >= 9 else "🟡 Есть, что повторить!" if score >= 7 else "🔴 Анатомия забыта!"
+    txt = f"Благодарим за прохождение теста! Ваш результат:\n\n<b>{status}</b>\n{score} из 10 правильных ответов."
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎁 Как получить мастер-класс?", callback_data="get_mc")],
+        [InlineKeyboardButton(text="🔄 Пройти тест заново", callback_data="retry")],
+        [InlineKeyboardButton(text="🗑 Сбросить бота (с нуля)", callback_data="full_reset")]
+    ])
+    await callback.message.edit_text(txt, reply_markup=kb, parse_mode="HTML")
 
 @dp.callback_query(F.data == "retry")
 async def retry(callback: types.CallbackQuery, state: FSMContext):
     await clear_stored_messages(callback.message.chat.id, state)
     await state.update_data(current_q=0, score=0)
+    try: await callback.message.delete()
+    except: pass
     await send_question(callback.message, state)
-    await callback.answer()
+    await callback.answer("Тест начат заново")
 
 @dp.callback_query(F.data == "full_reset")
 async def full_reset(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    t_id = data.get("transition_id")
     await clear_stored_messages(callback.message.chat.id, state)
+    if t_id:
+        try: await bot.delete_message(callback.message.chat.id, t_id)
+        except: pass
+    try: await callback.message.delete()
+    except: pass
     await state.clear()
     await cmd_start(callback.message, state)
 
-# ================== ЭКСПОРТ В EXCEL ==================
+# ================== ЭКСПОРТ ДЛЯ АДМИНА ==================
 import pandas as pd
-from aiogram.types import FSInputFile
-
-# Узнай свой ID у бота @userinfobot и впиши сюда вместо цифр
-ADMIN_ID = ТВОЙ_ID_ЦИФРАМИ 
-
 @dp.message(Command("export"))
 async def export_data(message: types.Message):
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id != ADMIN_ID: return
+    async with aiosqlite.connect("bot_database.db") as db:
+        async with db.execute("SELECT user_id, info FROM test_results") as cursor:
+            rows = await cursor.fetchall()
+    if not rows:
+        await message.answer("База пуста.")
         return
-
-    db_path = "bot_database.db"
-    try:
-        async with aiosqlite.connect(db_path) as db:
-            async with db.execute("SELECT user_id, info FROM test_results") as cursor:
-                rows = await cursor.fetchall()
-
-        if not rows:
-            await message.answer("База пока пуста.")
-            return
-
-        data_list = []
-        for row in rows:
-            info = json.loads(row[1])
-            info['user_id'] = row[0]
-            data_list.append(info)
-
-        df = pd.DataFrame(data_list)
-        df.to_excel("results.xlsx", index=False)
-        
-        await message.answer_document(FSInputFile("results.xlsx"), caption="📊 Список участников")
-        os.remove("results.xlsx")
-    except Exception as e:
-        await message.answer(f"Ошибка: {e}")
+    data_list = [dict(json.loads(r[1]), user_id=r[0]) for r in rows]
+    pd.DataFrame(data_list).to_excel("results.xlsx", index=False)
+    await message.answer_document(FSInputFile("results.xlsx"), caption="📊 Результаты")
+    os.remove("results.xlsx")
 
 # ================== ЗАПУСК ==================
 async def main():
     await storage._init_db()
+    print("Бот запущен!")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
