@@ -363,6 +363,43 @@ async def full_reset(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     await cmd_start(callback.message, state)
 
+# ================== ЭКСПОРТ В EXCEL ==================
+import pandas as pd
+from aiogram.types import FSInputFile
+
+# Узнай свой ID у бота @userinfobot и впиши сюда вместо цифр
+ADMIN_ID = ТВОЙ_ID_ЦИФРАМИ 
+
+@dp.message(Command("export"))
+async def export_data(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    db_path = "bot_database.db"
+    try:
+        async with aiosqlite.connect(db_path) as db:
+            async with db.execute("SELECT user_id, info FROM test_results") as cursor:
+                rows = await cursor.fetchall()
+
+        if not rows:
+            await message.answer("База пока пуста.")
+            return
+
+        data_list = []
+        for row in rows:
+            info = json.loads(row[1])
+            info['user_id'] = row[0]
+            data_list.append(info)
+
+        df = pd.DataFrame(data_list)
+        df.to_excel("results.xlsx", index=False)
+        
+        await message.answer_document(FSInputFile("results.xlsx"), caption="📊 Список участников")
+        os.remove("results.xlsx")
+    except Exception as e:
+        await message.answer(f"Ошибка: {e}")
+
+# ================== ЗАПУСК ==================
 async def main():
     await storage._init_db()
     await dp.start_polling(bot)
