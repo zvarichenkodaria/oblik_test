@@ -156,7 +156,7 @@ questions = [
     {"q": "Какая мышца отвечает за опущение хвоста брови?", "options": ["Круговая мышца глаза", "Мышца гордецов", "Мышца, опускающая бровь"], "answer": "Круговая мышца глаза"},
     {"q": "Наиболее частый мимический паттерн нижней трети лица", "options": ["DAO + platysma", "DAO + platysma + m. mentalis", "Работает только DAO"], "answer": "DAO + platysma"},
     {"q": "Подкожная клетчатка какой области обладает наиболее длинными соединительнотканными септами?", "options": ["Щёчной", "Околоушно-жевательной", "Подглазничной"], "answer": "Щёчной"},
-    {"q": "Кто обладает наименьшей емкостью среди слоев височной области?", "options": ["Подкожная клетчатка", "Межфасциальное пространство", "Межапоневротическое пространство"], "answer": "Подкожная клетчатка"},
+    {"q": "Кто обладает наименьшей ёмкостью среди слоёв височной области?", "options": ["Подкожная клетчатка", "Межфасциальное пространство", "Межапоневротическое пространство"], "answer": "Подкожная клетчатка"},
     {"q": "Пульсация какой артерии обнаруживается на 1-1,5 см спереди от козелка ушной раковины?", "options": ["Поперечной артерии лица", "Скуловисочной", "Поверхностной височной"], "answer": "Поверхностной височной"},
     {"q": "Как чаще всего располагается лицевая артерия по отношению к носогубной борозде?", "options": ["Непосредственно в ее проекции", "Медиальнее", "Латеральнее"], "answer": "Медиальнее"}
 ]
@@ -359,7 +359,7 @@ async def show_results(callback: types.CallbackQuery, state: FSMContext):
     status = "🟢 Отличные знания анатомии!" if score >= 9 else "🟡 Есть, что повторить!" if score >= 7 else "🔴 Анатомия забыта!"
     txt = f"Благодарим за прохождение теста! Ваш результат:\n\n<b>{status}</b>\n{score} из 10 правильных ответов."
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎁 Как получить мастер-класс?", callback_data="get_mc")],
+        [InlineKeyboardButton(text="🎁 Получить мастер-класс", callback_data="get_mc")],
         [InlineKeyboardButton(text="🔄 Пройти тест заново", callback_data="retry")],
         [InlineKeyboardButton(text="🗑 Сбросить бота (начать с нуля)", callback_data="full_reset")]
     ])
@@ -367,9 +367,51 @@ async def show_results(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data == "get_mc")
 async def show_mc_info(callback: types.CallbackQuery):
-    txt = ("В подарок для вас анатомический <b>видео-мастер-класс</b> от команды журнала «Облик»!\n\n"
-           "В течение суток он будет выслан вам на указанную электронную почту.\n\nДо новых встреч!")
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад к результатам", callback_data="results_back")]])
+    txt = (
+        "Вы прошли тест по анатомии, созданный командой журнала <b>«Облик»</b>. Благодарим вас за участие!\n"
+        "В подарок от редакции — анатомический видео-мастер-класс с клиническим анатомом Татьяной Овчаренко.\n\n"
+        "Желаем вам приятного и полезного просмотра!"
+    )
+
+    # Важно: kb и await должны быть сдвинуты вправо (4 пробела), как и txt
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        # 1 строка - 1 кнопка (Мастер-класс)
+        [
+            InlineKeyboardButton(
+                text="📺 Смотреть мастер-класс", 
+                url="https://oblikmagazine.ru/wp-content/uploads/2026/03/Oblik_Anatomy_3.mp4"
+            )
+        ],
+        
+        # 2 строка - 2 кнопки в одном ряду
+        [
+            InlineKeyboardButton(
+                text="Канал в Max", # Немного сократил, чтобы кнопки не разъехались
+                url="https://max.ru/id6686023070_biz"
+            ),
+            InlineKeyboardButton(
+                text="Подписка 2026", 
+                url="https://oblikmagazine.ru/product/podpiska2026/"
+            )
+        ],
+        
+        # 3 строка - 1 кнопка
+        [
+            InlineKeyboardButton(
+                text="Приобрести «Облик. Анатомия»", 
+                url="https://oblikmagazine.ru/product/anatomy/"
+            )
+        ],
+
+        # 4 строка - Кнопка Назад (на отдельной строке, как и просила)
+        [
+            InlineKeyboardButton(
+                text="⬅️ Вернуться назад", 
+                callback_data="results_back"  # Убедись, что этот callback_data совпадает с тем, что был раньше
+            )
+        ]
+    ])
+
     await callback.message.edit_text(txt, reply_markup=kb, parse_mode="HTML")
 
 @dp.callback_query(F.data == "results_back")
@@ -379,7 +421,7 @@ async def show_results_back(callback: types.CallbackQuery, state: FSMContext):
     status = "🟢 Отличные знания анатомии!" if score >= 9 else "🟡 Есть, что повторить!" if score >= 7 else "🔴 Анатомия забыта!"
     txt = f"Благодарим за прохождение теста! Ваш результат:\n\n<b>{status}</b>\n{score} из 10 правильных ответов."
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎁 Как получить мастер-класс?", callback_data="get_mc")],
+        [InlineKeyboardButton(text="🎁 Получить мастер-класс", callback_data="get_mc")],
         [InlineKeyboardButton(text="🔄 Пройти тест заново", callback_data="retry")],
         [InlineKeyboardButton(text="🗑 Сбросить бота (с нуля)", callback_data="full_reset")]
     ])
